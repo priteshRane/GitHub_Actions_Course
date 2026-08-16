@@ -20,7 +20,7 @@ on:
                 default: v3
                 description: Release from which to build and deploy
 jobs:
-    echo:
+    build:
         runs-on: ubuntu-latest
         steps: 
             - name: Build
@@ -29,6 +29,7 @@ jobs:
         runs-on: ubuntu-latest
         if: ${{ !inputs.dry-run }}
         environment: ${{ inputs.target }}
+        needs: build
         steps:
             - name: Deploy
               run: echo "Deploying to ${{ inputs.target }}"
