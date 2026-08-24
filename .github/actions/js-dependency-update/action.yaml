@@ -2,5 +2,6 @@ name: Update NPM Dependencies
 description: Checks if there are update for NPM packages.
 
 runs:
-  using: node24
+  using: node20
   main: index.js
+   
