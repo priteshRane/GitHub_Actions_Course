@@ -1,15 +1,21 @@
 const core = require('@actions/core');
 const exec= require('@actions/exec');
+const github = require('@actions/github');
+const { GitHub } = require('@actions/github/lib/utils');
 
 const validateBranchName = ({branchName}) => /^[a-zA-Z0-9_\-\,\/]+$/.test(branchName);
 const validateDirectoryName = ({branchName}) => /^[a-zA-Z0-9_\-\/]+$/.test(branchName);
 
 async function run() {
-    const baseBranch = core.getInput('base-branch');
-    const targetBranch = core.getInput('target-branch');
-    const ghToken = core.getInput('gh-token');
-    const workingDir = core.getInput('working-directory')
+    const baseBranch = core.getInput('base-branch', {required: true});
+    const targetBranch = core.getInput('target-branch', {required: true});
+    const ghToken = core.getInput('gh-token', {required: true});
+    const workingDir = core.getInput('working-directory', {required: true})
     const debug = core.getBooleanInput('debug')
+
+    const commonExecOpts = {
+        cwd: workingDir,
+    }
 
     core.setSecret(ghToken);
 
@@ -33,18 +39,51 @@ async function run() {
     core.info('base branch is: ${workingDir}');
 
     await exec.exec('npm update', [], {
-        cwd: workingDir
+        ...commonExecOpts
     });
 
     const gitStatus = await exec.getExecOutput('get status -s package.json', [], {
-        cwd: workingDir
+        ...commonExecOpts
     });
 
     if (gitStatus.stdout.length > 0) {
         core.info('There are updates available');
+        await exec.exec('git config --global user.name "gh-automation"');
+        await exec.exec('git config --global user.email "gh-automation@gmail.com"');
+        await exec.exec('git checkout -b ${{targetBranch}}', [], {
+            ...commonExecOpts
+        });
+        await exec.exec('git add package.json package-lock.json', [], {
+            ...commonExecOpts
+        });
+        await exec.exec('git commit -m "chore: update dependency"', [], {
+            ...commonExecOpts
+        });
+        await exec.exec('git push -u origin ${targetBranch} --force', [], {
+            ...commonExecOpts
+        });
+
+        const octokit = github.getOctokit(ghToken);
+        try {
+            await octokit.rest.pulls.create({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                title: 'Update NPM Dependency',
+                body: 'This pull updates npm packages',
+                base: baseBranch,
+                head: targetBranch
+            });
+        } catch (e) {
+            core.worning('error on the PR');
+            core.worning(e.message);
+            core.worning(e)
+        }
+        
     } else {
         core.info('No updates point in time');
     }
+
+
     /*
     1. Parse inputs:
         1.1 base-branch from which to check for updates
